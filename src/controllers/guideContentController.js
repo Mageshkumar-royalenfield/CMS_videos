@@ -132,55 +132,40 @@ db
     process.exit(1);
   });
 }
-uploadVideosToFirestore = async (req, res) => {
-  // return new Promise(async (resolve, reject) => {
-    try {
-      req.body = req.body || {};
-      console.log("req.body", req.body);
-      const { language, vehicleModel, ecuType, ecuModel, calibrationId, contentType } = req.body;
-      // if (!language || !vehicleModel || !ecuType || !ecuModel || !calibrationId || !contentType) {
-      //   return reject(new Error('Missing required fields: language, vehicleModel, ecuType, ecuModel, calibrationId, contentType'));
-      // }
-      const excelFile = path.resolve(__dirname, "../config/DTC_Videos.xlsx");
-      const videoData = await readExcelFile(excelFile);
-      // console.log("videoData", videoData);
-      const videoGroupByPcode = groupByKey(videoData, 'Pcode');
-      const videoRef = db
-        .collection(language)
-        .doc(vehicleModel)
-        .collection(ecuType)
-        .doc(ecuModel)
-        .collection(calibrationId.toString())
-        .doc(contentType);
-        // console.log("videoRef", videoRef);
-        Object.keys(videoGroupByPcode).forEach((key) => {
-          videoGroupByPcode[key].forEach((video) => {
-            delete video.Language;
-            delete video.Pcode;
-            delete video.Priority;
-            delete video.Description;
-          });
-           videoRef.update({
-            [key]: { videos: FieldValue.arrayUnion(...videoGroupByPcode[key]) }
-          }).then(() => {
-            console.log('Data added to Firebase');
-          }).catch((error) => {
-            console.error('Error updating document:', error);
-          });
-          // process.exit(0);
-          // console.log(videoGroupByPcode[key]);
-      });
-      // for (const video of videoData) {
-        // videoRef.update({
-        // [users]: FieldValue.arrayUnion(videoGroupByPcode)
-        // })
-        // const docRef = videoRef.doc(video.id);
-        // await docRef.set(video);
-      // }
-      res.json({ message: 'Videos uploaded successfully'});
-    } catch (error) {
-      // reject(new Error('Error uploading videos: ' + error.message));
+const uploadVideosToFirestore = async (req, res) => {
+  try {
+    const { language, vehicleModel, ecuType, ecuModel, calibrationId, contentType } = req.body || {};
+    if (!language || !vehicleModel || !ecuType || !ecuModel || !calibrationId || !contentType) {
+      return res.status(400).json({ error: 'Missing required fields: language, vehicleModel, ecuType, ecuModel, calibrationId, contentType' });
     }
+
+    const excelFile = path.resolve(__dirname, "../config/DTC_Videos.xlsx");
+    const videoData = await readExcelFile(excelFile);
+    const videoGroupByPcode = groupByKey(videoData, 'Pcode');
+    const videoRef = db
+      .collection(language)
+      .doc(vehicleModel)
+      .collection(ecuType)
+      .doc(ecuModel)
+      .collection(calibrationId.toString())
+      .doc(contentType);
+
+    // Use batch for atomic updates
+    const batch = db.batch();
+    Object.entries(videoGroupByPcode).forEach(([key, videos]) => {
+      // Clean up video objects
+      const cleanedVideos = videos.map(({ Language, Pcode, Priority, Description, ...rest }) => rest);
+      batch.update(videoRef, {
+        [`${key}.Videos`]: FieldValue.arrayUnion(...cleanedVideos)
+      });
+    });
+
+    await batch.commit();
+    res.json({ message: 'Videos uploaded successfully' });
+  } catch (error) {
+    console.error('Error uploading videos:', error);
+    res.status(500).json({ error: 'Error uploading videos: ' + error.message });
+  }
 }
 getContentfromFirebase = async () => {
 const collectionRef = db.collection('English').doc("Scram").collection("ABS").doc("ABS - Bosch").collection("700").doc("Preliminary").collection("U2922");

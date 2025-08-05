@@ -286,7 +286,7 @@ exports.groupByKey = (array, key) => {
   }, {});
 };
 
-exports.initializeFirestorePath = async (pathArray) => {
+async function initializeFirestorePath(pathArray){
     if (!Array.isArray(pathArray) || pathArray.length === 0) {
         throw new Error('Path array must be a non-empty array of { collection, doc } objects.');
     }
@@ -309,7 +309,7 @@ exports.initializeFirestorePath = async (pathArray) => {
         lastDocRef = docRef;
     }
 
-    return lastDocRef; // you can use this to add subcollections
+    return lastDocRef;
 }
 async function insertDataToFirestore(data, args) {
     const {
@@ -359,8 +359,8 @@ async function insertDataToFirestore(data, args) {
                     { collection: language, doc: vehicleModel },
                     { collection: ecuType, doc: ecuModel },
                     { collection: calibrationId.toString(), doc: contentType }];
+                    console.log("path", path);
                 await initializeFirestorePath(path);
-                console.log("path", path);
                 dbRef = await db
                     .collection(language)
                     .doc(vehicleModel)
